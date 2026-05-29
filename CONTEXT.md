@@ -102,3 +102,38 @@ Ver `NEXT_STEPS.md` em cada repositório para o roadmap detalhado. Prioridades i
 1. Deploy do dashboard (site-auditor-ui) no Railway
 2. Autenticação por API key na API
 3. Endpoint `/audit/sitemap` para integração direta sem UI
+
+---
+
+## Visão maior — Plataforma de microserviços de marketing
+
+O site-auditor é o primeiro serviço de uma plataforma maior. A ideia central é:
+**cada serviço faz uma coisa bem definida, expõe uma API HTTP, e pode ser composto com os demais.**
+
+O mesmo padrão (FastAPI + Railway + Streamlit para UI interna) se aplica a qualquer fonte de dados ou automação de marketing.
+
+### Serviços mapeados ou em discussão
+
+| Serviço | Status | O que faz |
+|---------|--------|-----------|
+| site-auditor | ✅ Em produção | Audita qualidade técnica de SEO de uma página |
+| site-auditor-ui | 🔧 Em desenvolvimento | Dashboard para usar o site-auditor visualmente |
+| product-tracker | 💡 A definir | Coleta informações sobre publicações de novos softwares/versões feitas pelo time de produto — ainda sem fonte de dados definida |
+
+### Sobre o product-tracker
+
+O time de produto da AltoQi publica informações sobre softwares em algum canal que o time de marketing ainda não tem visibilidade total. A ideia é criar um serviço que:
+- Monitore esse(s) canal(is) de publicação
+- Normalize as informações coletadas (nome do produto, versão, data, descrição)
+- Exponha uma API para que outros serviços (ou o dashboard) consumam esses dados
+
+A fonte de dados e o formato ainda precisam ser investigados com o time de produto antes de começar a implementação.
+
+### Composição futura
+
+Com múltiplos serviços rodando, é possível criar automações como:
+- "Quando um novo software for publicado → auditar a página do produto no site → alertar se o score de SEO estiver abaixo de 80"
+- "A cada semana → rodar o sitemap completo → comparar score com semana anterior → notificar regressões"
+- "Detectar que uma página foi atualizada no Webflow → disparar auditoria automática"
+
+Cada serviço permanece independente e testável isoladamente — a composição acontece via chamadas HTTP entre eles ou via um orquestrador simples.
