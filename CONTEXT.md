@@ -118,16 +118,65 @@ O mesmo padrão (FastAPI + Railway + Streamlit para UI interna) se aplica a qual
 |---------|--------|-----------|
 | site-auditor | ✅ Em produção | Audita qualidade técnica de SEO de uma página |
 | site-auditor-ui | 🔧 Em desenvolvimento | Dashboard para usar o site-auditor visualmente |
-| product-tracker | 💡 A definir | Coleta informações sobre publicações de novos softwares/versões feitas pelo time de produto — ainda sem fonte de dados definida |
+| product-watcher | 💡 Fonte a definir | Monitora onde o time de produto publica novas versões de software |
+| webflow-publisher | 📋 Planejado | Publica/atualiza itens no CMS do Webflow via API |
+| hubspot-updater | 📋 Planejado | Atualiza o link do instalador nos formulários de lead do HubSpot |
 
-### Sobre o product-tracker
+---
 
-O time de produto da AltoQi publica informações sobre softwares em algum canal que o time de marketing ainda não tem visibilidade total. A ideia é criar um serviço que:
-- Monitore esse(s) canal(is) de publicação
-- Normalize as informações coletadas (nome do produto, versão, data, descrição)
-- Exponha uma API para que outros serviços (ou o dashboard) consumam esses dados
+### Fluxo de lançamento de nova versão de software
 
-A fonte de dados e o formato ainda precisam ser investigados com o time de produto antes de começar a implementação.
+Contexto: quando o time de produto lança uma nova versão, o time de marketing precisa
+manualmente (1) atualizar o CMS do Webflow e (2) atualizar o link do instalador no HubSpot.
+O objetivo é automatizar esse fluxo com aprovação humana antes da publicação final.
+
+```
+[Fonte do time de produto]  ← ainda a definir (ver abaixo)
+        ↓  crawler detecta nova versão + URL do instalador
+[product-watcher]
+        ↓  normaliza os dados (produto, versão, data, URL do instalador)
+   ┌────┴──────────────────────────────┐
+   ↓                                   ↓
+[webflow-publisher]            [hubspot-updater]
+  Cria/atualiza item no CMS:     Atualiza redirect URL
+  - Página de novidades          do formulário de lead
+  - Página de downloads          via HubSpot Forms API v3
+  (publica em staging)
+
+        ↓  envia notificação (Slack ou e-mail)
+[Aprovação humana]
+  Resumo: "Nova versão detectada: AltoQi RMS 2024-12
+           Publicado em staging. Aprovar para produção?"
+        ↓  clique confirma
+  - Webflow: promove staging → produção
+  - HubSpot: atualiza o redirect URL do formulário
+```
+
+#### Detalhes técnicos já mapeados
+
+**Webflow CMS (webflow-publisher)**
+- O Webflow do site da AltoQi usa CMS (não páginas estáticas) — tem API oficial
+- É possível criar e atualizar itens de coleção via `POST/PATCH /collections/{id}/items`
+- Páginas alvo: novidades e downloads
+- Publicação em staging primeiro, promoção para produção mediante aprovação
+
+**HubSpot Forms (hubspot-updater)**
+- O que muda: o campo "redirecionar para URL externo" nas Opções do formulário
+- URL atual de exemplo: `https://cdn.altoqi.com.br/AltoQi/AltoQi_2024-12_RMS.exe`
+- API: `PATCH /marketing/v3/forms/{formId}` com API key do HubSpot
+- Atualização só é feita após aprovação humana
+
+**Aprovação humana**
+- Após publicar em staging, o serviço envia notificação com resumo das mudanças
+- A aprovação pode ser um botão no dashboard Streamlit ou um link direto na notificação
+- Somente após aprovação o webflow-publisher promove para produção e o hubspot-updater executa
+
+**Fonte do time de produto (product-watcher)**
+- Ainda não definida — precisa ser alinhada com o time de produto
+- Pode ser: Notion, planilha Google, página interna, canal Slack, e-mail, etc.
+- Cada fonte exige uma estratégia de crawler diferente — definir antes de implementar
+
+---
 
 ### Composição futura
 
