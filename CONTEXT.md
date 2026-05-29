@@ -123,6 +123,7 @@ O mesmo padrão (FastAPI + Railway + Streamlit para UI interna) se aplica a qual
 | hubspot-publisher | 📋 Planejado | Publica posts no blog do HubSpot E atualiza formulários de lead |
 | orchestrator | 📋 Planejado | Recebe intenção do usuário via LLM e roteia para o agente correto |
 | blog-writer | 💡 Fora do MVP atual | Gera rascunhos de posts dado tema, referências e tom de voz |
+| webflow-agent | 📋 Planejado (Opção A) | Repositório Claude Code com skills e contexto do Webflow da AltoQi para ajustes de design |
 
 ---
 
@@ -234,6 +235,38 @@ O `site-auditor` já existente alimenta o `blog-writer` com dados das páginas q
 
 ---
 
+### webflow-agent (Opção A — Claude Code)
+
+Repositório dedicado que funciona como um agente especializado em design e CMS do Webflow da AltoQi. Usado por devs e marketing técnico via Claude Code CLI — não requer implementação de backend próprio.
+
+**Estrutura do repositório:**
+```
+webflow-agent/
+├── CLAUDE.md       # contexto completo: IDs de coleções, estrutura de páginas,
+│                   # convenções de design, tons de voz, restrições
+├── .claude/
+│   └── settings.json  # Webflow MCP configurado
+└── skills/
+    ├── update-hero.md       # /update-hero — altera seção hero de uma página
+    ├── change-cta.md        # /change-cta — atualiza texto e link de CTAs
+    ├── publish-content.md   # /publish-content — publica item no CMS
+    └── audit-and-fix.md     # /audit-and-fix — audita via site-auditor e sugere correções no Webflow
+```
+
+**Como usar:**
+1. Dev abre o repositório no Claude Code
+2. Contexto do Webflow da AltoQi já está carregado no CLAUDE.md
+3. Usa slash commands para tarefas recorrentes ou descreve o ajuste em linguagem natural
+4. Claude aciona o Webflow MCP diretamente para executar as mudanças
+
+**Vantagens sobre usar claude.ai diretamente:**
+- Contexto persistente (IDs de coleções, estrutura, convenções) — não precisa repetir a cada conversa
+- Skills padronizadas para tarefas recorrentes do time
+- Histórico de mudanças rastreável via git
+- Sem custo adicional de infraestrutura — é só um repositório
+
+---
+
 ### Composição futura
 
 Com todos os serviços rodando, automações possíveis:
@@ -242,3 +275,76 @@ Com todos os serviços rodando, automações possíveis:
 - "Usuário informa tema → blog-writer gera rascunho → revisão → hubspot-publisher publica"
 
 Cada serviço permanece independente e testável isoladamente. A composição acontece via orquestrador LLM ou via chamadas HTTP diretas entre serviços.
+
+---
+
+### Diagrama da plataforma (Mermaid)
+
+```mermaid
+graph TD
+    subgraph Usuarios["Usuários"]
+        Dashboard["Dashboard\nStreamlit"]
+        DevUser["Dev / Marketing Técnico\nClaude Code"]
+    end
+
+    subgraph Seguranca["Segurança"]
+        Guard["Prompt Injection Guard\nmiddleware FastAPI"]
+        RateLimit["Rate Limiter\nslowapi"]
+    end
+
+    subgraph Core["Core"]
+        Orchestrator["Orquestrador\nClaude API + tool use"]
+        Langfuse["Langfuse\ncusto · tokens · latência"]
+    end
+
+    subgraph Agentes["Agentes Especializados"]
+        WebflowPub["webflow-publisher\nCMS novidades + downloads"]
+        HubspotPub["hubspot-publisher\nblog + formulários"]
+        BlogWriter["blog-writer\nredação com contexto SEO"]
+        ProductWatcher["product-watcher\ncrawler · fonte a definir"]
+    end
+
+    subgraph ClaudeCode["webflow-agent (Claude Code)"]
+        WebflowAgent["webflow-agent\nCLAUDE.md + skills + Webflow MCP"]
+    end
+
+    subgraph Auditoria["Auditoria SEO"]
+        SiteAuditor["site-auditor API\nFastAPI · Railway"]
+        SiteAuditorUI["site-auditor-ui\nStreamlit · Railway"]
+    end
+
+    subgraph Externos["Sistemas Externos"]
+        WebflowAPI["Webflow CMS API"]
+        HubspotAPI["HubSpot API"]
+        ClaudeAPI["Claude API\nAnthropic"]
+        Supabase[("Supabase\nhistórico de auditorias")]
+        PageSpeed["PageSpeed Insights API\nCore Web Vitals"]
+    end
+
+    Dashboard --> Guard
+    Guard --> RateLimit
+    RateLimit --> Orchestrator
+    Orchestrator --> Langfuse
+    Orchestrator --> WebflowPub
+    Orchestrator --> HubspotPub
+    Orchestrator --> BlogWriter
+    Orchestrator --> ClaudeAPI
+
+    ProductWatcher --> WebflowPub
+    ProductWatcher --> HubspotPub
+
+    BlogWriter --> SiteAuditor
+    BlogWriter --> HubspotPub
+
+    WebflowPub --> WebflowAPI
+    HubspotPub --> HubspotAPI
+
+    DevUser --> WebflowAgent
+    WebflowAgent --> WebflowAPI
+
+    SiteAuditorUI --> SiteAuditor
+    SiteAuditor --> Supabase
+    SiteAuditor --> PageSpeed
+
+    Dashboard --> SiteAuditorUI
+```
