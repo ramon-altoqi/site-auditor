@@ -120,7 +120,9 @@ O mesmo padrão (FastAPI + Railway + Streamlit para UI interna) se aplica a qual
 | site-auditor-ui | 🔧 Em desenvolvimento | Dashboard para usar o site-auditor visualmente |
 | product-watcher | 💡 Fonte a definir | Monitora onde o time de produto publica novas versões de software |
 | webflow-publisher | 📋 Planejado | Publica/atualiza itens no CMS do Webflow via API |
-| hubspot-updater | 📋 Planejado | Atualiza o link do instalador nos formulários de lead do HubSpot |
+| hubspot-publisher | 📋 Planejado | Publica posts no blog do HubSpot E atualiza formulários de lead |
+| orchestrator | 📋 Planejado | Recebe intenção do usuário via LLM e roteia para o agente correto |
+| blog-writer | 💡 Fora do MVP atual | Gera rascunhos de posts dado tema, referências e tom de voz |
 
 ---
 
@@ -160,11 +162,14 @@ O objetivo é automatizar esse fluxo com aprovação humana antes da publicaçã
 - Páginas alvo: novidades e downloads
 - Publicação em staging primeiro, promoção para produção mediante aprovação
 
-**HubSpot Forms (hubspot-updater)**
-- O que muda: o campo "redirecionar para URL externo" nas Opções do formulário
+**HubSpot (hubspot-publisher) — um serviço, duas responsabilidades**
+- `POST /hubspot/blog` → cria/edita post no blog do HubSpot
+- `PATCH /hubspot/form/{id}` → atualiza redirect URL do formulário de lead
+- Compartilham autenticação e cliente HTTP — não justifica dois serviços separados
+- Formulário: campo "redirecionar para URL externo" nas Opções do formulário
 - URL atual de exemplo: `https://cdn.altoqi.com.br/AltoQi/AltoQi_2024-12_RMS.exe`
-- API: `PATCH /marketing/v3/forms/{formId}` com API key do HubSpot
-- Atualização só é feita após aprovação humana
+- API de forms: `PATCH /marketing/v3/forms/{formId}` com API key do HubSpot
+- Atualização do form só ocorre após aprovação humana
 
 **Aprovação humana**
 - Após publicar em staging, o serviço envia notificação com resumo das mudanças
@@ -178,11 +183,62 @@ O objetivo é automatizar esse fluxo com aprovação humana antes da publicaçã
 
 ---
 
+### Extensões planejadas para o site-auditor
+
+Antes de novos serviços, há melhorias de alto valor no que já existe:
+
+- **Core Web Vitals** — integrar Google PageSpeed Insights API (gratuita) para trazer LCP, CLS e FID direto no retorno do `/audit`
+- **Links quebrados** — verificar status HTTP de cada link interno encontrado, reportar 404s
+- **Histórico de scores** — persistir resultados no Supabase (free tier suficiente: 500MB para dezenas de milhares de auditorias)
+
+---
+
+### Padrão orquestrador
+
+Para compor os agentes de forma inteligente, o padrão é um **orquestrador LLM** que recebe a intenção do usuário em linguagem natural e decide qual agente acionar.
+
+```
+[Usuário digita no dashboard]
+  ex: "publica post sobre BIM no blog"
+  ex: "atualiza o instalador do Visus para 2025-01"
+        ↓
+[Orquestrador — Claude API com tool use]
+  Entende intenção, extrai entidades,
+  decide qual(is) agente(s) acionar
+        ↓              ↓               ↓
+[webflow-publisher] [hubspot-publisher] [blog-writer]
+```
+
+Cada agente especializado vira uma "tool" disponível para o orquestrador. O orquestrador não executa nada diretamente — apenas roteia e coordena.
+
+---
+
+### Agente de redação de blog (blog-writer)
+
+Fora do MVP atual, mas se encaixa naturalmente na plataforma:
+
+```
+[Usuário] → tema + referências (URLs) + tom de voz
+    ↓
+[site-auditor]  ←  audita as URLs de referência
+    ↓  dados SEO + estrutura das páginas concorrentes
+[blog-writer — Claude API]
+  Gera rascunho contextualizado
+    ↓
+[Revisão humana no dashboard]
+    ↓ aprovação
+[hubspot-publisher → POST /hubspot/blog]
+```
+
+O `site-auditor` já existente alimenta o `blog-writer` com dados das páginas que se quer superar no ranking — auditoria técnica vira insumo para produção de conteúdo.
+
+---
+
 ### Composição futura
 
-Com múltiplos serviços rodando, é possível criar automações como:
-- "Quando um novo software for publicado → auditar a página do produto no site → alertar se o score de SEO estiver abaixo de 80"
-- "A cada semana → rodar o sitemap completo → comparar score com semana anterior → notificar regressões"
-- "Detectar que uma página foi atualizada no Webflow → disparar auditoria automática"
+Com todos os serviços rodando, automações possíveis:
+- "Novo software lançado → atualizar Webflow + HubSpot → auditar a página → alertar se score < 80"
+- "Toda semana → rodar sitemap completo → comparar score com semana anterior → notificar regressões"
+- "Usuário informa tema → blog-writer gera rascunho → revisão → hubspot-publisher publica"
 
-Cada serviço permanece independente e testável isoladamente — a composição acontece via chamadas HTTP entre eles ou via um orquestrador simples.
+Cada serviço permanece independente e testável isoladamente. A composição acontece via orquestrador LLM ou via chamadas HTTP diretas entre serviços.
